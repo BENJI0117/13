@@ -1,0 +1,185 @@
+:root{
+  --bg-deep:#0A1420;
+  --bg-mid:#0F2233;
+  --felt-1:#0C3149;
+  --felt-2:#0A2438;
+  --gold:#CBA135;
+  --gold-light:#E9CD82;
+  --ivory:#F4EEDD;
+  --ivory-dim:#C9C2AC;
+  --card-bg:#FBF6E9;
+  --suit-spade:#B8862E;
+  --suit-heart:#B23A3A;
+  --suit-club:#2F6B4F;
+  --suit-diamond:#3B4652;
+  --shadow:0 8px 24px rgba(0,0,0,.45);
+  --radius-panel:16px;
+}
+*{box-sizing:border-box;}
+html,body{
+  margin:0;padding:0;min-height:100%;
+  background:
+    radial-gradient(ellipse at 50% -10%, #163a54 0%, transparent 55%),
+    linear-gradient(180deg,var(--bg-deep) 0%,var(--bg-mid) 55%,var(--bg-deep) 100%);
+  color:var(--ivory);
+  font-family:'Inter',system-ui,sans-serif;
+  overflow-x:hidden;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+}
+.font-display{font-family:'Philosopher',serif;}
+input{font-family:'Inter',sans-serif;}
+
+/* ---------- app shell / screens ---------- */
+#app{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;max-width:960px;margin:0 auto;padding:10px 10px calc(env(safe-area-inset-bottom,0px)+10px);}
+.screen{display:none;flex:1;flex-direction:column;}
+.screen.active{display:flex;}
+
+.conn-indicator{
+  position:fixed;top:8px;right:8px;z-index:80;
+  font-size:11px;padding:4px 10px;border-radius:20px;
+  background:rgba(0,0,0,.4);border:1px solid rgba(233,205,130,.3);
+}
+.conn-indicator.offline{color:#f3b6a8;border-color:rgba(240,120,90,.5);}
+.conn-indicator.online{color:#bfe9c9;}
+
+/* ---------- home screen ---------- */
+.home-card{
+  margin:auto;max-width:420px;width:100%;text-align:center;
+  background:linear-gradient(165deg,rgba(20,34,51,.9),rgba(13,24,38,.85));
+  border:1px solid rgba(203,161,53,.35);border-radius:20px;
+  padding:32px 26px;box-shadow:var(--shadow);
+}
+.home-card h1{font-family:'Philosopher',serif;font-size:30px;color:var(--gold-light);margin:0 0 4px;letter-spacing:.5px;}
+.home-card .tag{font-size:13px;color:var(--ivory-dim);margin-bottom:22px;}
+.field label{display:block;font-size:12px;color:var(--ivory-dim);margin-bottom:6px;text-align:left;}
+.field input{
+  width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(233,205,130,.3);
+  background:rgba(0,0,0,.25);color:var(--ivory);font-size:15px;margin-bottom:14px;
+}
+.field input:focus{outline:none;border-color:var(--gold);}
+.stack{display:flex;flex-direction:column;gap:10px;}
+.error-text{color:#f3b6a8;font-size:13px;min-height:18px;margin-top:8px;}
+.join-panel{max-height:0;overflow:hidden;transition:max-height .25s ease;}
+.join-panel.show{max-height:160px;margin-top:10px;}
+
+/* ---------- buttons ---------- */
+.btn{font-family:'Inter',sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;padding:13px 26px;border-radius:30px;border:none;cursor:pointer;transition:transform .15s ease, box-shadow .15s ease, opacity .15s ease;}
+.btn:active{transform:scale(.97);}
+.btn-play{background:linear-gradient(160deg,var(--gold-light),var(--gold));color:#2b2107;box-shadow:0 4px 14px rgba(203,161,53,.4);}
+.btn-play:disabled{opacity:.35;cursor:not-allowed;box-shadow:none;}
+.btn-pass{background:rgba(255,255,255,.06);color:var(--ivory);border:1px solid rgba(233,205,130,.35);}
+.btn-pass:disabled{opacity:.3;cursor:not-allowed;}
+.btn-ghost{background:transparent;color:var(--gold-light);border:1px solid rgba(233,205,130,.4);}
+.btn-small{padding:8px 16px;font-size:12px;}
+.btn-full{width:100%;}
+
+/* ---------- room lobby ---------- */
+.room-card{margin:auto;max-width:460px;width:100%;background:linear-gradient(165deg,rgba(20,34,51,.9),rgba(13,24,38,.85));border:1px solid rgba(203,161,53,.35);border-radius:20px;padding:26px;box-shadow:var(--shadow);}
+.room-code-box{text-align:center;margin-bottom:18px;}
+.room-code-box .label{font-size:11px;color:var(--ivory-dim);letter-spacing:1px;}
+.room-code-box .code{font-family:'Philosopher',serif;font-size:38px;letter-spacing:6px;color:var(--gold-light);margin:4px 0 10px;}
+.invite-hint{font-size:12px;color:var(--ivory-dim);margin-top:8px;}
+.player-list{display:flex;flex-direction:column;gap:8px;margin:18px 0;}
+.player-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);font-size:14px;}
+.player-row.offline{opacity:.5;}
+.player-row.empty{opacity:.4;font-style:italic;}
+.player-row .p-num{color:var(--gold-light);font-weight:700;width:18px;}
+.player-row .p-name{flex:1;text-align:left;}
+.player-row .p-status{font-size:11px;color:var(--gold-light);}
+#waitingHostNote,#waitingHostRound,#waitingHostOver{font-size:12px;color:var(--ivory-dim);text-align:center;margin-top:10px;}
+
+/* ---------- table (reused from single-player layout) ---------- */
+.table-wrap{flex:1;display:flex;flex-direction:column;margin-top:10px;border-radius:22px;padding:14px;background:radial-gradient(ellipse at 50% 40%, var(--felt-1) 0%, var(--felt-2) 70%);border:2px solid rgba(203,161,53,.3);box-shadow:inset 0 0 60px rgba(0,0,0,.5), var(--shadow);position:relative;min-height:560px;}
+.top-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:linear-gradient(180deg,rgba(20,34,51,.9),rgba(15,26,40,.75));border:1px solid rgba(203,161,53,.3);border-radius:var(--radius-panel);margin-bottom:8px;flex-wrap:wrap;}
+.top-bar h1{font-family:'Philosopher',serif;font-size:18px;color:var(--gold-light);margin:0;}
+.top-bar .round-tag{font-size:12px;color:var(--ivory-dim);}
+.top-bar .turn-name{font-size:13px;color:var(--gold-light);}
+.icon-btn{width:32px;height:32px;border-radius:50%;border:1px solid rgba(233,205,130,.4);background:rgba(0,0,0,.25);color:var(--gold-light);font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+
+.table-grid{flex:1;display:grid;grid-template-columns:1fr minmax(140px,1.4fr) 1fr;grid-template-rows:auto 1fr;grid-template-areas:"top top top" "left center right";gap:8px;align-items:start;}
+.ai-slot{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;}
+.ai-slot.top{grid-area:top;}
+.ai-slot.left{grid-area:left;align-self:center;}
+.ai-slot.right{grid-area:right;align-self:center;}
+.ai-slot.offline{opacity:.45;}
+.avatar-ring{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Philosopher',serif;font-size:20px;font-weight:700;background:linear-gradient(160deg,#1c3a52,#0d2233);border:2px solid rgba(233,205,130,.35);color:var(--gold-light);transition:border-color .2s ease, box-shadow .2s ease;}
+.ai-slot.active .avatar-ring,.human-strip.active .avatar-ring{border-color:var(--gold);box-shadow:0 0 0 4px rgba(203,161,53,.18), 0 0 18px rgba(203,161,53,.5);}
+.ai-name{font-size:13px;font-weight:600;color:var(--ivory);}
+.card-count-badge{background:rgba(0,0,0,.3);border:1px solid rgba(233,205,130,.25);border-radius:20px;padding:1px 8px;font-size:11px;color:var(--gold-light);}
+.status-pill{font-size:10px;padding:1px 7px;border-radius:10px;background:rgba(203,161,53,.15);color:var(--gold-light);border:1px solid rgba(203,161,53,.3);opacity:0;transform:translateY(-3px);transition:all .25s ease;}
+.status-pill.show{opacity:1;transform:translateY(0);}
+.status-pill.pass{background:rgba(180,60,60,.15);color:#e39494;border-color:rgba(180,60,60,.35);}
+
+.center-area{grid-area:center;min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;}
+.trick-label{font-size:11px;color:var(--ivory-dim);min-height:14px;}
+.played-cards{display:flex;justify-content:center;flex-wrap:wrap;min-height:92px;align-items:center;}
+.played-cards .card{margin-left:-14px;}
+.played-cards .card:first-child{margin-left:0;}
+.empty-table-hint{font-size:12px;color:rgba(244,238,221,.35);font-style:italic;}
+.combo-name{font-family:'Philosopher',serif;font-size:15px;color:var(--gold-light);}
+
+.card{width:54px;height:78px;border-radius:8px;background:linear-gradient(160deg,var(--card-bg),#efe6cf);border:1px solid rgba(0,0,0,.15);box-shadow:0 2px 5px rgba(0,0,0,.35);position:relative;flex-shrink:0;display:flex;flex-direction:column;justify-content:space-between;padding:4px 5px;transition:transform .18s ease, box-shadow .18s ease;}
+.card .rank{font-family:'Philosopher',serif;font-weight:700;font-size:14px;line-height:1;}
+.card .suit-corner{font-size:12px;line-height:1;margin-top:1px;}
+.card .suit-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:22px;}
+.card .corner.bottom{align-self:flex-end;transform:rotate(180deg);}
+.card.spade .rank,.card.spade .suit-corner,.card.spade .suit-center{color:var(--suit-spade);}
+.card.heart .rank,.card.heart .suit-corner,.card.heart .suit-center{color:var(--suit-heart);}
+.card.club .rank,.card.club .suit-corner,.card.club .suit-center{color:var(--suit-club);}
+.card.diamond .rank,.card.diamond .suit-corner,.card.diamond .suit-center{color:var(--suit-diamond);}
+
+.human-strip{grid-area:human;margin-top:6px;display:flex;flex-direction:column;align-items:center;gap:8px;}
+.human-header{display:flex;align-items:center;gap:10px;justify-content:center;}
+.hand-row{display:flex;justify-content:center;padding:14px 6px 4px;width:100%;overflow-x:auto;min-height:120px;}
+.hand-row .card{width:60px;height:88px;cursor:pointer;margin-left:-24px;}
+.hand-row .card:first-child{margin-left:0;}
+.hand-row .card .rank{font-size:15px;}
+.hand-row .card .suit-corner{font-size:13px;}
+.hand-row .card .suit-center{font-size:26px;}
+.hand-row .card.selected{transform:translateY(-18px);box-shadow:0 -3px 0 var(--gold), 0 6px 16px rgba(0,0,0,.5);border-color:var(--gold);}
+.hand-row .card:hover{transform:translateY(-8px);}
+.hand-row .card.selected:hover{transform:translateY(-22px);}
+
+.controls-row{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;}
+.message-bar{min-height:20px;font-size:13px;color:#f3b6a8;text-align:center;font-weight:600;}
+.message-bar.ok{color:var(--gold-light);}
+
+/* ---------- chat ---------- */
+.chat-panel{margin-top:8px;background:rgba(0,0,0,.25);border:1px solid rgba(233,205,130,.2);border-radius:12px;padding:8px;}
+.chat-messages{max-height:110px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;font-size:12px;padding:4px;}
+.chat-row .chat-name{color:var(--gold-light);font-weight:700;}
+.chat-row .chat-text{color:var(--ivory);}
+.chat-row.system{font-style:italic;color:var(--ivory-dim);}
+.chat-row .chat-sys{color:var(--ivory-dim);}
+.chat-input-row{display:flex;gap:6px;margin-top:6px;}
+.chat-input-row input{flex:1;padding:8px 10px;border-radius:8px;border:1px solid rgba(233,205,130,.25);background:rgba(0,0,0,.3);color:var(--ivory);font-size:12px;}
+.chat-input-row input:focus{outline:none;border-color:var(--gold);}
+
+/* ---------- modals ---------- */
+.overlay{position:fixed;inset:0;background:rgba(4,8,14,.78);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;opacity:0;pointer-events:none;transition:opacity .25s ease;}
+.overlay.show{opacity:1;pointer-events:auto;}
+.modal{background:linear-gradient(165deg,#142a3e,#0d1e2e);border:1px solid rgba(203,161,53,.4);border-radius:18px;padding:26px 24px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6);text-align:center;max-height:86vh;overflow-y:auto;}
+.modal h2{font-family:'Philosopher',serif;color:var(--gold-light);font-size:24px;margin:0 0 4px;}
+.modal .sub{color:var(--ivory-dim);font-size:13px;margin-bottom:16px;}
+.result-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:10px;background:rgba(255,255,255,.04);margin-bottom:7px;font-size:14px;}
+.result-row.winner{background:rgba(203,161,53,.14);border:1px solid rgba(203,161,53,.4);}
+.result-row .name{font-weight:700;}
+.result-row .pts{color:var(--gold-light);font-weight:700;}
+.skull{font-size:44px;margin:6px 0;}
+.loser-name{font-family:'Philosopher',serif;font-size:26px;color:#f3b6a8;margin:4px 0 14px;}
+.help-text{text-align:left;font-size:13px;line-height:1.65;color:var(--ivory-dim);}
+.help-text b{color:var(--gold-light);}
+.help-text .rule-line{margin-bottom:8px;}
+
+@media (max-width:560px){
+  .home-card,.room-card{padding:22px 18px;}
+  .top-bar h1{font-size:15px;}
+  .table-grid{grid-template-columns:60px 1fr 60px;}
+  .avatar-ring{width:42px;height:42px;font-size:16px;}
+  .card{width:42px;height:60px;}
+  .card .suit-center{font-size:17px;}
+  .hand-row .card{width:48px;height:70px;margin-left:-20px;}
+  .hand-row .card .suit-center{font-size:20px;}
+  .btn{padding:11px 18px;font-size:13px;}
+}
