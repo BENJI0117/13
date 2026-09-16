@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>13 Модны Покер — Multiplayer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%83%8F%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Philosopher:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="conn-indicator online" id="connIndicator">🟢 ONLINE</div>
+
+<div id="app">
+
+  <!-- ============ HOME SCREEN ============ -->
+  <div class="screen active" id="screen-home">
+    <div class="home-card">
+      <h1 class="font-display">13 МОДНЫ ПОКЕР</h1>
+      <div class="tag">Найзуудтайгаа онлайнаар тоглоно</div>
+
+      <div class="field">
+        <label for="nameInput">Таны нэр</label>
+        <input type="text" id="nameInput" maxlength="16" placeholder="Жишээ: Тэмүүлэн">
+      </div>
+
+      <div class="stack">
+        <button class="btn btn-play btn-full" id="createRoomBtn">ӨРӨӨ ҮҮСГЭХ</button>
+        <button class="btn btn-ghost btn-full" id="showJoinBtn">ӨРӨӨНД ОРОХ</button>
+      </div>
+
+      <div class="join-panel" id="joinPanel">
+        <div class="field" style="margin-top:14px;">
+          <label for="joinCodeInput">Өрөөний код</label>
+          <input type="text" id="joinCodeInput" maxlength="5" placeholder="A7K9P" style="text-transform:uppercase;letter-spacing:3px;text-align:center;">
+        </div>
+        <button class="btn btn-play btn-full" id="joinConfirmBtn">ОРОХ</button>
+      </div>
+
+      <div class="error-text" id="homeError"></div>
+    </div>
+  </div>
+
+  <!-- ============ ROOM LOBBY SCREEN ============ -->
+  <div class="screen" id="screen-room">
+    <div class="room-card">
+      <div class="room-code-box">
+        <div class="label">ӨРӨӨНИЙ КОД</div>
+        <div class="code" id="roomCodeDisplay">-----</div>
+        <button class="btn btn-ghost btn-small" id="copyCodeBtn">КОД ХУУЛАХ</button>
+        <div class="invite-hint">Найздаа энэ кодыг өгөөд тоглоомдоо урь.</div>
+      </div>
+
+      <div class="player-list" id="playerList"></div>
+
+      <button class="btn btn-play btn-full" id="startGameBtn" style="display:none;">ТОГЛООМ ЭХЛҮҮЛЭХ</button>
+      <div id="waitingHostNote" style="display:none;">HOST тоглоомыг эхлүүлэхийг хүлээж байна…</div>
+      <div class="error-text" id="roomError"></div>
+
+      <button class="btn btn-ghost btn-full" id="leaveRoomBtnLobby" style="margin-top:14px;">ӨРӨӨНӨӨС ГАРАХ</button>
+    </div>
+  </div>
+
+  <!-- ============ GAME SCREEN ============ -->
+  <div class="screen" id="screen-game">
+    <div class="top-bar">
+      <div style="display:flex;align-items:baseline;gap:10px;">
+        <h1 class="font-display">13 МОДНЫ ПОКЕР</h1>
+        <div class="round-tag">Раунд <span id="roundNum">1</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="turn-name" id="turnName">—</div>
+        <button class="icon-btn" id="settingsBtn" title="Дүрэм">⚙</button>
+        <button class="icon-btn" id="leaveRoomBtnGame" title="Гарах">✕</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-grid">
+        <div class="ai-slot top" id="slot-top">
+          <div class="avatar-ring">?</div>
+          <div class="ai-name">—</div>
+          <div class="card-count-badge">0 хөзөр</div>
+          <div class="status-pill"></div>
+        </div>
+        <div class="ai-slot left" id="slot-left">
+          <div class="avatar-ring">?</div>
+          <div class="ai-name">—</div>
+          <div class="card-count-badge">0 хөзөр</div>
+          <div class="status-pill"></div>
+        </div>
+        <div class="center-area">
+          <div class="trick-label" id="lastPlayerLabel">Тоглоом эхэлж байна…</div>
+          <div class="played-cards" id="playedCards"><div class="empty-table-hint">Ширээ хоосон байна</div></div>
+          <div class="combo-name" id="comboName"></div>
+        </div>
+        <div class="ai-slot right" id="slot-right">
+          <div class="avatar-ring">?</div>
+          <div class="ai-name">—</div>
+          <div class="card-count-badge">0 хөзөр</div>
+          <div class="status-pill"></div>
+        </div>
+      </div>
+
+      <div class="human-strip" id="humanStrip">
+        <div class="human-header">
+          <div class="avatar-ring" id="myAvatar">Т</div>
+          <div>
+            <div class="ai-name">Та</div>
+            <div class="card-count-badge" id="humanCount">13 хөзөр</div>
+          </div>
+        </div>
+        <div class="hand-row" id="handRow"></div>
+        <div class="message-bar" id="messageBar"></div>
+        <div class="controls-row">
+          <button class="btn btn-play" id="playBtn">ТОГЛОХ</button>
+          <button class="btn btn-pass" id="passBtn">PASS</button>
+        </div>
+      </div>
+
+      <div class="chat-panel">
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chatInput" maxlength="120" placeholder="Чат бичих…">
+          <button class="btn btn-ghost btn-small" id="chatSendBtn">→</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Round result modal -->
+<div class="overlay" id="roundOverlay">
+  <div class="modal">
+    <div style="font-size:34px;">🏆</div>
+    <h2>ROUND WINNER</h2>
+    <div class="sub" id="roundWinnerName"></div>
+    <div id="roundResults"></div>
+    <button class="btn btn-play btn-full" id="nextRoundBtn" style="margin-top:14px;">ДАРААГИЙН РАУНД</button>
+    <div id="waitingHostRound" style="display:none;">HOST дараагийн раундыг эхлүүлэхийг хүлээж байна…</div>
+  </div>
+</div>
+
+<!-- Game over modal -->
+<div class="overlay" id="gameOverOverlay">
+  <div class="modal">
+    <h2 style="letter-spacing:2px;">GAME OVER</h2>
+    <div class="skull">☠️</div>
+    <div class="sub">ЯЛАГДАГЧ</div>
+    <div class="loser-name" id="loserName"></div>
+    <div class="sub" id="loserScore"></div>
+    <div id="finalResults" style="margin-top:10px;"></div>
+    <button class="btn btn-play btn-full" id="restartBtn" style="margin-top:16px;">ДАХИН ТОГЛОХ</button>
+    <div id="waitingHostOver" style="display:none;">HOST шинэ тоглоом эхлүүлэхийг хүлээж байна…</div>
+  </div>
+</div>
+
+<!-- Rules / settings modal -->
+<div class="overlay" id="helpOverlay">
+  <div class="modal">
+    <h2>ДҮРЭМ</h2>
+    <div class="help-text">
+      <div class="rule-line"><b>Хөзрийн хүч:</b> 3&lt;4&lt;5&lt;6&lt;7&lt;8&lt;9&lt;10&lt;Боол(J)&lt;Хатан(Q)&lt;Ноён(K)&lt;Тамга(A)&lt;2</div>
+      <div class="rule-line"><b>Өнгийн хүч:</b> ♦ Дөрвөлжин &lt; ♣ Цэцэг &lt; ♥ Бунд &lt; ♠ Гэл (Гэл хамгийн хүчтэй)</div>
+      <div class="rule-line"><b>Комбинаци:</b> Ганц, Хос, Гурвал, Дараалал (5), Адил өнгө (5), Покер (4+1, 5), Straight Flush (5)</div>
+      <div class="rule-line"><b>Эхлэл:</b> 3♦ байгаа тоглогч эхэлнэ, 3♦-ийг агуулсан комбинациар.</div>
+      <div class="rule-line"><b>Дийлэх:</b> Зөвхөн ижил төрлийн комбинациар илүү хүчтэйгээр дийлнэ. Тэнцвэл толгой хөзрийн өнгөөр шийднэ.</div>
+      <div class="rule-line"><b>PASS:</b> 3 дараалсан PASS-ийн дараа сүүлд тавьсан хүн шинэ тойрог эхлүүлнэ.</div>
+      <div class="rule-line"><b>Оноо:</b> 10=20, 11=22, 12=24 оноо. 13 хөзөр үлдвэл шууд GAME OVER. Нийт 30 оноонд хүрвэл ялагдана.</div>
+    </div>
+    <button class="btn btn-ghost btn-full" id="closeHelpBtn" style="margin-top:16px;">ХААХ</button>
+  </div>
+</div>
+
+<!-- Supabase (CDN — build step шаардлагагүй) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="game.js"></script>
+</body>
+</html>
