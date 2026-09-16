@@ -8,18 +8,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Philosopher:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 
-<div class="conn-indicator online" id="connIndicator">🟢 ONLINE</div>
+<div class="conn-indicator online" id="connIndicator">ONLINE</div>
 
 <div id="app">
 
   <!-- ============ HOME SCREEN ============ -->
   <div class="screen active" id="screen-home">
     <div class="home-card">
-      <h1 class="font-display">13 МОДНЫ ПОКЕР</h1>
+      <div class="motif-corner tl"></div>
+      <div class="motif-corner tr"></div>
+      <div class="home-kicker">PREMIUM ONLINE CARD GAME</div>
+      <h1 class="font-display">13 <span class="accent">МОДНЫ</span> ПОКЕР</h1>
       <div class="tag">Найзуудтайгаа онлайнаар тоглоно</div>
 
       <div class="field">
@@ -41,12 +44,17 @@
       </div>
 
       <div class="error-text" id="homeError"></div>
+
+      <div class="home-rules-link">
+        <button class="btn btn-text" id="rulesBtnHome">ДҮРЭМ ХАРАХ</button>
+      </div>
     </div>
   </div>
 
   <!-- ============ ROOM LOBBY SCREEN ============ -->
   <div class="screen" id="screen-room">
     <div class="room-card">
+      <div class="motif-band" style="margin-bottom:20px;"></div>
       <div class="room-code-box">
         <div class="label">ӨРӨӨНИЙ КОД</div>
         <div class="code" id="roomCodeDisplay">-----</div>
@@ -67,38 +75,48 @@
   <!-- ============ GAME SCREEN ============ -->
   <div class="screen" id="screen-game">
     <div class="top-bar">
-      <div style="display:flex;align-items:baseline;gap:10px;">
+      <div class="brand">
         <h1 class="font-display">13 МОДНЫ ПОКЕР</h1>
-        <div class="round-tag">Раунд <span id="roundNum">1</span></div>
+        <div class="round-tag">ROUND <span id="roundNum">1</span></div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;">
+      <div class="right-cluster">
         <div class="turn-name" id="turnName">—</div>
-        <button class="icon-btn" id="settingsBtn" title="Дүрэм">⚙</button>
+        <button class="icon-btn" id="rulesBtnGame" title="Дүрэм">📖</button>
+        <button class="icon-btn" id="settingsBtn" title="Тохиргоо">⚙</button>
         <button class="icon-btn" id="leaveRoomBtnGame" title="Гарах">✕</button>
       </div>
+    </div>
+
+    <div class="info-row">
+      <div class="room-chip" id="roomChip" title="Кодыг хуулах">
+        <span class="code-mini" id="roomChipCode">-----</span>
+        <span class="count" id="roomChipCount">0/4</span>
+      </div>
+      <div class="scoreboard" id="scoreboard"></div>
     </div>
 
     <div class="table-wrap">
       <div class="table-grid">
         <div class="ai-slot top" id="slot-top">
-          <div class="avatar-ring">?</div>
+          <div class="avatar-ring">?<span class="conn-dot"></span></div>
           <div class="ai-name">—</div>
           <div class="card-count-badge">0 хөзөр</div>
           <div class="status-pill"></div>
         </div>
         <div class="ai-slot left" id="slot-left">
-          <div class="avatar-ring">?</div>
+          <div class="avatar-ring">?<span class="conn-dot"></span></div>
           <div class="ai-name">—</div>
           <div class="card-count-badge">0 хөзөр</div>
           <div class="status-pill"></div>
         </div>
         <div class="center-area">
+          <div class="current-play-label">CURRENT PLAY</div>
           <div class="trick-label" id="lastPlayerLabel">Тоглоом эхэлж байна…</div>
           <div class="played-cards" id="playedCards"><div class="empty-table-hint">Ширээ хоосон байна</div></div>
           <div class="combo-name" id="comboName"></div>
         </div>
         <div class="ai-slot right" id="slot-right">
-          <div class="avatar-ring">?</div>
+          <div class="avatar-ring">?<span class="conn-dot"></span></div>
           <div class="ai-name">—</div>
           <div class="card-count-badge">0 хөзөр</div>
           <div class="status-pill"></div>
@@ -107,7 +125,7 @@
 
       <div class="human-strip" id="humanStrip">
         <div class="human-header">
-          <div class="avatar-ring" id="myAvatar">Т</div>
+          <div class="avatar-ring" id="myAvatar">Т<span class="conn-dot"></span></div>
           <div>
             <div class="ai-name">Та</div>
             <div class="card-count-badge" id="humanCount">13 хөзөр</div>
@@ -120,23 +138,33 @@
           <button class="btn btn-pass" id="passBtn">PASS</button>
         </div>
       </div>
-
-      <div class="chat-panel">
-        <div class="chat-messages" id="chatMessages"></div>
-        <div class="chat-input-row">
-          <input type="text" id="chatInput" maxlength="120" placeholder="Чат бичих…">
-          <button class="btn btn-ghost btn-small" id="chatSendBtn">→</button>
-        </div>
-      </div>
     </div>
   </div>
 
 </div>
 
+<!-- Chat FAB + panel -->
+<button class="chat-fab" id="chatFabBtn" title="Чат">💬<span class="badge" id="chatFabBadge">0</span></button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="reaction-bar" id="reactionBar">
+    <button class="reaction-btn" data-emoji="😂">😂</button>
+    <button class="reaction-btn" data-emoji="🔥">🔥</button>
+    <button class="reaction-btn" data-emoji="😮">😮</button>
+    <button class="reaction-btn" data-emoji="👍">👍</button>
+    <button class="reaction-btn" data-emoji="😈">😈</button>
+    <button class="reaction-btn" data-emoji="GG">GG</button>
+  </div>
+  <div class="chat-input-row">
+    <input type="text" id="chatInput" maxlength="120" placeholder="Чат бичих…">
+    <button class="btn btn-ghost btn-small" id="chatSendBtn">→</button>
+  </div>
+</div>
+
 <!-- Round result modal -->
 <div class="overlay" id="roundOverlay">
   <div class="modal">
-    <div style="font-size:34px;">🏆</div>
+    <div class="trophy-burst">🏆</div>
     <h2>ROUND WINNER</h2>
     <div class="sub" id="roundWinnerName"></div>
     <div id="roundResults"></div>
@@ -159,7 +187,7 @@
   </div>
 </div>
 
-<!-- Rules / settings modal -->
+<!-- Rules modal -->
 <div class="overlay" id="helpOverlay">
   <div class="modal">
     <h2>ДҮРЭМ</h2>
@@ -176,8 +204,44 @@
   </div>
 </div>
 
+<!-- Settings modal -->
+<div class="overlay" id="settingsOverlay">
+  <div class="modal">
+    <h2>ТОХИРГОО</h2>
+    <div class="sub">Тоглоомын дуу, хөдөлгөөн, хэл</div>
+
+    <div class="settings-row">
+      <div><div class="s-label">Дуу чимээ</div><div class="s-sub">Карт тоглох, PASS дуу</div></div>
+      <label class="switch"><input type="checkbox" id="soundToggle" checked><span class="track"></span></label>
+    </div>
+    <div class="settings-row">
+      <div><div class="s-label">Хөгжим</div><div class="s-sub">Дэвсгэр аяз (нам)</div></div>
+      <label class="switch"><input type="checkbox" id="musicToggle"><span class="track"></span></label>
+    </div>
+    <div class="settings-row">
+      <div><div class="s-label">Чичиргээ</div><div class="s-sub">Утсан дээр л ажиллана</div></div>
+      <label class="switch"><input type="checkbox" id="vibrationToggle" checked><span class="track"></span></label>
+    </div>
+    <div class="settings-row">
+      <div><div class="s-label">Анимаци</div><div class="s-sub">Гөлгөр шилжилтүүд</div></div>
+      <label class="switch"><input type="checkbox" id="animationsToggle" checked><span class="track"></span></label>
+    </div>
+
+    <div style="text-align:left;margin-top:14px;">
+      <div class="s-label" style="margin-bottom:8px;">Хэл</div>
+      <div class="lang-row">
+        <button class="lang-btn active" id="langMnBtn">Монгол</button>
+        <button class="lang-btn" id="langEnBtn" disabled>English</button>
+      </div>
+      <div class="lang-note">English хувилбар тун удахгүй нэмэгдэнэ.</div>
+    </div>
+
+    <button class="btn btn-ghost btn-full" id="closeSettingsBtn" style="margin-top:20px;">ХААХ</button>
+  </div>
+</div>
+
 <!-- Supabase (CDN — build step шаардлагагүй) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="game.js?v=2"></script>
+<script src="game.js?v=3"></script>
 </body>
 </html>
