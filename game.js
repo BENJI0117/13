@@ -7,16 +7,16 @@
    3. NETWORK LAYER              — өрөө, realtime sync, private hand sync, presence
    4. UI / RENDERING             — дэлгэц солих, карт зурах, event handler-ууд
    ========================================================================= */
-
+ 
 /* =========================================================================
    1. SUPABASE CONFIG — ӨӨРИЙН УТГААР СОЛИНО!
    Supabase Dashboard → Project Settings → API хэсгээс copy хийнэ.
    ========================================================================= */
 const SUPABASE_URL = "https://keiessfnzgfgarlpqycx.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtlaWVzc2ZuemdmZ2FybHBxeWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1NTY5ODQsImV4cCI6MjEwNTEzMjk4NH0.UiMo5vMnAJovp47HCLEHtJkBMkgDfbgU4TtRy7-XrKs";
-
+ 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+ 
 /* =========================================================================
    2. ТОГЛООМЫН ЦЭВЭР ЛОГИК (single-player хувилбартай ижил, туршигдсан)
    ========================================================================= */
@@ -30,7 +30,7 @@ const TYPE_LABEL_MN = {
   single:'Ганц', pair:'Хос', set:'Гурвал', straight:'Дараалал',
   flush:'Адил өнгө', poker:'Покер', straightflush:'Straight Flush'
 };
-
+ 
 function cardFromId(id){
   const suit = id.slice(-1);
   const rank = id.slice(0,-1);
@@ -38,7 +38,7 @@ function cardFromId(id){
 }
 function idsToCards(ids){ return (ids||[]).map(cardFromId); }
 function cardsToIds(cards){ return cards.map(c=>c.id); }
-
+ 
 function createDeck(){
   const deck=[];
   for(const suit of SUITS) for(const rank of RANK_ORDER)
@@ -104,7 +104,7 @@ function calculatePenalty(len){
   return 0;
 }
 function hasCard(cards,rank,suit){ return cards.some(c=>c.rank===rank&&c.suit===suit); }
-
+ 
 /* =========================================================================
    3. NETWORK LAYER (Supabase)
    ========================================================================= */
@@ -114,18 +114,18 @@ function generateRoomCode(){
   for(let i=0;i<5;i++) s+=ROOM_CODE_CHARS[Math.floor(Math.random()*ROOM_CODE_CHARS.length)];
   return s;
 }
-
+ 
 const Net = {
   uid:null, name:'', roomId:null, mySeat:null, isHost:false,
   roomRow:null, playersRows:[], gameRow:null,
   room:null, myHand:[],
   channel:null, onlineUids:new Set()
 };
-
+ 
 function saveSession(){ try{ localStorage.setItem('poker13_roomId', Net.roomId||''); }catch(e){} }
 function loadSession(){ try{ return localStorage.getItem('poker13_roomId')||null; }catch(e){ return null; } }
 function clearSession(){ try{ localStorage.removeItem('poker13_roomId'); }catch(e){} }
-
+ 
 async function authInit(cb){
   const { data:{ session } } = await sb.auth.getSession();
   if(session){ Net.uid=session.user.id; cb(); return; }
@@ -133,13 +133,13 @@ async function authInit(cb){
   if(error){ showFatal('Supabase холболт амжилтгүй: '+error.message+' (Anonymous sign-in идэвхжсэн эсэхийг шалгана уу)'); return; }
   Net.uid=data.user.id; cb();
 }
-
+ 
 function findFreeSeat(playersRows){
   const used=new Set(playersRows.map(p=>p.seat));
   for(let s=0;s<4;s++) if(!used.has(s)) return s;
   return -1;
 }
-
+ 
 async function createRoom(name){
   Net.name=name;
   for(let attempt=0; attempt<8; attempt++){
@@ -157,12 +157,12 @@ async function createRoom(name){
   }
   throw new Error('Өрөөний код үүсгэж чадсангүй, дахин оролдоно уу.');
 }
-
+ 
 async function joinRoom(code, name){
   code=code.trim().toUpperCase();
   const { data:roomRow, error:roomErr } = await sb.from('rooms').select('*').eq('id',code).maybeSingle();
   if(roomErr || !roomRow) throw new Error('Ийм кодтой өрөө олдсонгүй.');
-
+ 
   const { data:existingMe } = await sb.from('room_players').select('*').eq('room_id',code).eq('uid',Net.uid).maybeSingle();
   if(existingMe){
     Net.roomId=code; Net.mySeat=existingMe.seat; Net.isHost=!!existingMe.is_host; Net.name=existingMe.name;
@@ -170,12 +170,12 @@ async function joinRoom(code, name){
     saveSession(); await enterRoom();
     return code;
   }
-
+ 
   if(roomRow.status!=='lobby') throw new Error('Тоглоом аль хэдийн эхэлсэн тул нэвтрэх боломжгүй.');
   const { data:playersRows } = await sb.from('room_players').select('*').eq('room_id',code);
   const seat=findFreeSeat(playersRows||[]);
   if(seat===-1) throw new Error('Өрөө дүүрсэн байна (4/4).');
-
+ 
   Net.name=name;
   const { error:insErr } = await sb.from('room_players').insert({ room_id:code, uid:Net.uid, name, seat, connected:true, is_host:false, hand_count:0, total_score:0 });
   if(insErr) throw new Error(insErr.message);
@@ -183,12 +183,12 @@ async function joinRoom(code, name){
   saveSession(); await enterRoom();
   return code;
 }
-
+ 
 async function enterRoom(){
   await refreshAll();
   subscribeRealtime();
 }
-
+ 
 async function refreshAll(){
   const [{data:roomRow}, {data:players}, {data:gameRow}, {data:handRow}] = await Promise.all([
     sb.from('rooms').select('*').eq('id',Net.roomId).maybeSingle(),
@@ -204,11 +204,11 @@ async function refreshAll(){
   renderHand();
   pushRoomUpdate();
 }
-
+ 
 function subscribeRealtime(){
   if(Net.channel) return;
   const channel = sb.channel('room-'+Net.roomId, { config:{ presence:{ key:Net.uid } } });
-
+ 
   channel.on('postgres_changes', {event:'*', schema:'public', table:'rooms', filter:'id=eq.'+Net.roomId}, payload=>{
     if(payload.eventType==='DELETE'){ onRoomDeleted(); return; }
     Net.roomRow=payload.new; pushRoomUpdate();
@@ -226,7 +226,7 @@ function subscribeRealtime(){
   channel.on('postgres_changes', {event:'INSERT', schema:'public', table:'room_chat', filter:'room_id=eq.'+Net.roomId}, payload=>{
     appendChatMessage(payload.new);
   });
-
+ 
   channel.on('presence', {event:'sync'}, ()=>{
     const state=channel.presenceState();
     const online=new Set();
@@ -240,7 +240,7 @@ function subscribeRealtime(){
   channel.on('presence', {event:'leave'}, ({leftPresences})=>{
     leftPresences.forEach(p=>{ if(p.uid!==Net.uid) pushSystemNoticeLocal((p.name||'Тоглогч')+' холболт тасарлаа'); });
   });
-
+ 
   channel.subscribe(async status=>{
     if(status==='SUBSCRIBED'){
       await channel.track({uid:Net.uid, name:Net.name, seat:Net.mySeat});
@@ -249,10 +249,10 @@ function subscribeRealtime(){
       setConnIndicator(false);
     }
   });
-
+ 
   Net.channel=channel;
 }
-
+ 
 function applyPlayerChange(payload){
   const row = payload.new || payload.old;
   if(payload.eventType==='DELETE'){
@@ -262,7 +262,7 @@ function applyPlayerChange(payload){
     if(idx>=0) Net.playersRows[idx]=payload.new; else Net.playersRows.push(payload.new);
   }
 }
-
+ 
 function assembleRoom(){
   if(!Net.roomRow) return null;
   const players={};
@@ -290,7 +290,7 @@ function pushRoomUpdate(){
   if(!Net.room) return;
   onRoomUpdate(Net.room);
 }
-
+ 
 async function leaveRoom(){
   if(!Net.roomId) return;
   try{
@@ -307,7 +307,7 @@ async function leaveRoom(){
   Net.roomId=null; Net.mySeat=null; Net.isHost=false; Net.room=null; Net.myHand=[]; Net.onlineUids=new Set();
   showScreen('home');
 }
-
+ 
 /* ---------- host: тоглоом эхлүүлэх / шинэ раунд / шинэ тоглоом ---------- */
 async function hostStartGame(){
   if(!Net.isHost) return;
@@ -316,18 +316,18 @@ async function hostStartGame(){
   await dealNewRound(1, resetScores(players));
 }
 function resetScores(players){ const upd={}; Object.keys(players).forEach(uid=>upd[uid]=0); return upd; }
-
+ 
 async function dealNewRound(roundNum, scoreOverride){
   const players=Net.room.players||{};
   const seatToUid={};
   Object.entries(players).forEach(([uid,p])=>seatToUid[p.seat]=uid);
-
+ 
   const deck=shuffleDeck(createDeck());
   const hands=[[],[],[],[]];
   deck.forEach((c,i)=>hands[i%4].push(c.id));
   let startingSeat=0;
   for(let s=0;s<4;s++) if(hands[s].includes('3♦')) startingSeat=s;
-
+ 
   for(let s=0;s<4;s++){
     const uid=seatToUid[s];
     if(!uid) continue;
@@ -344,21 +344,21 @@ async function dealNewRound(roundNum, scoreOverride){
   });
   await sb.from('rooms').update({status:'playing', round:roundNum}).eq('id',Net.roomId);
 }
-
+ 
 /* ---------- play / pass (зөвхөн ээлжтэй тоглогч дуудна) ---------- */
 async function submitPlay(cards, combo){
   const newHandIds=cardsToIds(Net.myHand.filter(c=>!cards.some(sc=>sc.id===c.id)));
-
+ 
   await sb.from('room_hands').update({cards:newHandIds}).eq('room_id',Net.roomId).eq('uid',Net.uid);
   await sb.from('room_players').update({hand_count:newHandIds.length}).eq('room_id',Net.roomId).eq('uid',Net.uid);
-
+ 
   const gameUpd={
     current_combo:{ type:combo.type, cardIds:cardsToIds(combo.cards), seat:Net.mySeat },
     last_player_seat:Net.mySeat,
     passed_seats:{0:false,1:false,2:false,3:false},
     first_move_of_round:false
   };
-
+ 
   if(newHandIds.length===0){
     gameUpd.round_winner_seat=Net.mySeat;
     let instantLoser=-1;
@@ -379,7 +379,7 @@ async function submitPlay(cards, combo){
   }
   await sb.from('room_game').update(gameUpd).eq('room_id',Net.roomId);
 }
-
+ 
 async function submitPass(){
   const g=Net.room.game;
   const passed=Object.assign({}, g.passedSeats, {[Net.mySeat]:true});
@@ -393,7 +393,7 @@ async function submitPass(){
   await sb.from('room_game').update(upd).eq('room_id',Net.roomId);
 }
 function nextActiveSeat(seat){ return (seat+1)%4; }
-
+ 
 async function hostContinueAfterRound(){
   if(!Net.isHost) return;
   const g=Net.room.game;
@@ -416,7 +416,7 @@ async function hostRestartGame(){
   if(!Net.isHost) return;
   await dealNewRound(1, resetScores(Net.room.players));
 }
-
+ 
 /* ---------- host migration (presence ашиглан) ---------- */
 async function maybeClaimHost(){
   if(!Net.room || !Net.roomId) return;
@@ -432,7 +432,7 @@ async function maybeClaimHost(){
     await sb.from('room_players').update({is_host:true}).eq('room_id',Net.roomId).eq('uid',Net.uid);
   }
 }
-
+ 
 /* ---------- chat ---------- */
 function pushChat(text, systemOnly){
   sb.from('room_chat').insert({
@@ -440,7 +440,7 @@ function pushChat(text, systemOnly){
     text, system:!!systemOnly
   });
 }
-
+ 
 /* =========================================================================
    4. UI / RENDERING
    ========================================================================= */
@@ -448,7 +448,7 @@ const $ = id=>document.getElementById(id);
 let selected=[];
 let currentScreen='home';
 let joinPanelOpen=false;
-
+ 
 function showScreen(name){
   currentScreen=name;
   ['home','room','game'].forEach(s=>{
@@ -464,7 +464,7 @@ function setConnIndicator(online){
   el.textContent = online ? '🟢 ONLINE' : '🔴 CONNECTION LOST';
   el.className = 'conn-indicator '+(online?'online':'offline');
 }
-
+ 
 /* ---------- lobby home ---------- */
 $('createRoomBtn').addEventListener('click', async ()=>{
   const name=$('nameInput').value.trim();
@@ -486,7 +486,7 @@ $('joinConfirmBtn').addEventListener('click', async ()=>{
   try{ await joinRoom(code, name); }catch(e){ showFatal(e.message); }
   $('joinConfirmBtn').disabled=false;
 });
-
+ 
 /* ---------- room lobby ---------- */
 $('copyCodeBtn').addEventListener('click', ()=>{
   const code=Net.roomId;
@@ -497,7 +497,7 @@ $('copyCodeBtn').addEventListener('click', ()=>{
 });
 $('startGameBtn').addEventListener('click', ()=>hostStartGame());
 $('leaveRoomBtnLobby').addEventListener('click', ()=>leaveRoom());
-
+ 
 /* ---------- in-game ---------- */
 $('leaveRoomBtnGame').addEventListener('click', ()=>{ if(confirm('Тоглолтын дунд гарах уу?')) leaveRoom(); });
 $('playBtn').addEventListener('click', attemptPlay);
@@ -507,7 +507,7 @@ $('restartBtn').addEventListener('click', ()=>hostRestartGame());
 $('settingsBtn').addEventListener('click', ()=>$('helpOverlay').classList.add('show'));
 $('closeHelpBtn').addEventListener('click', ()=>$('helpOverlay').classList.remove('show'));
 $('helpOverlay').addEventListener('click', e=>{ if(e.target===$('helpOverlay')) $('helpOverlay').classList.remove('show'); });
-
+ 
 $('chatSendBtn').addEventListener('click', sendChatFromInput);
 $('chatInput').addEventListener('keydown', e=>{ if(e.key==='Enter') sendChatFromInput(); });
 function sendChatFromInput(){
@@ -535,7 +535,7 @@ function pushSystemNoticeLocal(text){
   box.scrollTop=box.scrollHeight;
 }
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
+ 
 /* ---------- card element ---------- */
 function cardEl(card){
   const d=document.createElement('div');
@@ -546,7 +546,7 @@ function cardEl(card){
     '<div class="corner bottom"><div class="rank">'+card.rank+'</div><div class="suit-corner">'+card.suit+'</div></div>';
   return d;
 }
-
+ 
 /* ---------- main room update handler ---------- */
 function onRoomUpdate(room){
   if(room.status==='lobby'){ showScreen('room'); renderLobbyRoom(room); }
@@ -558,7 +558,7 @@ function onRoomDeleted(){
   clearSession();
   showScreen('home');
 }
-
+ 
 /* ---------- lobby room rendering ---------- */
 function renderLobbyRoom(room){
   $('roomCodeDisplay').textContent=room.code;
@@ -585,7 +585,7 @@ function renderLobbyRoom(room){
   $('startGameBtn').disabled = bySeat.length<4;
   $('waitingHostNote').style.display = (!Net.isHost && bySeat.length===4) ? 'block' : 'none';
 }
-
+ 
 /* ---------- relative seat mapping ---------- */
 function relPos(seat){ const rel=(seat-Net.mySeat+4)%4; return ['bottom','right','top','left'][rel]; }
 function seatOfPos(pos){ const order=['bottom','right','top','left']; return (Net.mySeat+order.indexOf(pos))%4; }
@@ -594,7 +594,7 @@ function playerBySeat(room,seat){
   for(const uid of Object.keys(players)) if(players[uid].seat===seat) return {uid,...players[uid]};
   return null;
 }
-
+ 
 /* ---------- game screen rendering ---------- */
 function renderGameScreen(room){
   const g=room.game;
@@ -602,7 +602,7 @@ function renderGameScreen(room){
   $('roundNum').textContent=room.round;
   const curPlayer=playerBySeat(room,g.currentPlayerSeat);
   $('turnName').textContent = curPlayer ? (curPlayer.uid===Net.uid?'Таны ээлж':curPlayer.name+' ээлж') : '—';
-
+ 
   ['top','left','right'].forEach(pos=>{
     const seat=seatOfPos(pos);
     const p=playerBySeat(room,seat);
@@ -618,11 +618,11 @@ function renderGameScreen(room){
     else pill.className='status-pill';
     slot.classList.toggle('offline', !p.connected);
   });
-
+ 
   const me=playerBySeat(room,Net.mySeat);
   $('humanCount').textContent=(me?me.handCount:Net.myHand.length)+' хөзөр';
   $('humanStrip').classList.toggle('active', g.currentPlayerSeat===Net.mySeat);
-
+ 
   const played=$('playedCards');
   played.innerHTML='';
   if(!g.currentCombo){
@@ -635,14 +635,14 @@ function renderGameScreen(room){
     const p=playerBySeat(room,g.currentCombo.seat);
     $('lastPlayerLabel').textContent=(p&&p.uid===Net.uid?'Та':(p?p.name:''))+' тавьсан';
   }
-
+ 
   renderHand();
   renderControls(room);
-
+ 
   if(room.status==='roundEnd') showRoundResult(room); else $('roundOverlay').classList.remove('show');
   if(room.status==='gameOver') showGameOver(room); else $('gameOverOverlay').classList.remove('show');
 }
-
+ 
 function renderHand(){
   if(!Net.room || Net.room.status!=='playing'){ const hr=$('handRow'); if(hr) hr.innerHTML=''; return; }
   const hand=sortHand(Net.myHand);
@@ -672,7 +672,7 @@ function renderControls(room){
   $('playBtn').disabled=!myTurn;
   $('passBtn').disabled=!myTurn || !g.currentCombo;
 }
-
+ 
 /* ---------- play / pass validation (client-side) ---------- */
 function validationMessageFor(sel){
   const len=sel.length;
@@ -711,7 +711,7 @@ function attemptPass(){
   if(!g.currentCombo){ setMessage('Шинэ тойргийг та эхлүүлэх ёстой тул PASS хийх боломжгүй'); return; }
   submitPass().catch(e=>setMessage('Алдаа: '+e.message));
 }
-
+ 
 /* ---------- round / game-over modals ---------- */
 function showRoundResult(room){
   const g=room.game;
@@ -745,7 +745,7 @@ function showGameOver(room){
   $('waitingHostOver').style.display = Net.isHost ? 'none' : 'block';
   $('gameOverOverlay').classList.add('show');
 }
-
+ 
 /* =========================================================================
    INIT
    ========================================================================= */
