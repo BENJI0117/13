@@ -28,6 +28,7 @@
   --card-height:calc(var(--card-width) * 1.43);
 }
 
+:root{
   /* --- surfaces --- */
   --bg-void:#0A0D12;
   --bg-void-2:#0D1117;
@@ -736,6 +737,19 @@ body.no-anim *{transition:none!important;animation:none!important;}
   padding:12px 4px;border-bottom:1px solid var(--hairline);text-align:left;
 }
 .settings-row:last-of-type{border-bottom:none;}
+.volume-row{padding:8px 4px;text-align:left;}
+.volume-row .s-sub{font-size:10px;letter-spacing:.8px;color:var(--text-muted);margin-bottom:5px;}
+.volume-row input[type="range"]{
+  -webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:2px;
+  background:rgba(255,255,255,.1);outline:none;
+}
+.volume-row input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold-bright);
+  border:2px solid var(--bg-panel-2);cursor:pointer;
+}
+.volume-row input[type="range"]::-moz-range-thumb{
+  width:16px;height:16px;border-radius:50%;background:var(--gold-bright);border:2px solid var(--bg-panel-2);cursor:pointer;
+}
 .settings-row .s-label{font-size:13.5px;font-weight:600;color:var(--ivory);}
 .settings-row .s-sub{font-size:11px;color:var(--text-muted);margin-top:2px;}
 .switch{position:relative;width:42px;height:24px;flex-shrink:0;}
@@ -1080,6 +1094,18 @@ body.in-game #app{height:100dvh;height:100vh;}
     <div class="settings-row">
       <div><div class="s-label">Хөгжим</div><div class="s-sub">Дэвсгэр аяз (нам)</div></div>
       <label class="switch"><input type="checkbox" id="musicToggle"><span class="track"></span></label>
+    </div>
+    <div class="volume-row">
+      <div class="s-sub">MASTER VOLUME</div>
+      <input type="range" id="masterVolumeSlider" min="0" max="1" step="0.05" value="1">
+    </div>
+    <div class="volume-row">
+      <div class="s-sub">MUSIC VOLUME</div>
+      <input type="range" id="musicVolumeSlider" min="0" max="1" step="0.05" value="0.7">
+    </div>
+    <div class="volume-row">
+      <div class="s-sub">SFX VOLUME</div>
+      <input type="range" id="sfxVolumeSlider" min="0" max="1" step="0.05" value="1">
     </div>
     <div class="settings-row">
       <div><div class="s-label">Чичиргээ</div><div class="s-sub">Утсан дээр л ажиллана</div></div>
@@ -1589,8 +1615,13 @@ let chatUnread=0;
 let lastTurnWasMine=false;
 let prevComboKey=null;
 let hasRenderedTableOnce=false;
+let prevHandCounts={};
+let prevPassedSeats={};
+let prevRoundForStartSound=null;
 let prevOnline=true;
 let prevPlayerUids=null;
+let prevLobbyReady={};
+let prevLobbyCount=0;
 function flashNewTrick(){
   const el=$('newTrickFlash');
   if(!el) return;
@@ -1621,8 +1652,11 @@ function spawnParticles(container){
   }
 }
 
-/* ---------- settings (sound / music / vibration / animations / language) ---------- */
-const Settings = Object.assign({sound:true,music:false,vibration:true,animations:true,lang:'mn'}, loadSettings());
+/* ---------- settings (sound / music / vibration / animations / language / volumes) ---------- */
+const Settings = Object.assign({
+  sound:true, music:false, vibration:true, animations:true, lang:'mn',
+  masterVolume:1, musicVolume:0.7, sfxVolume:1
+}, loadSettings());
 function loadSettings(){ try{ return JSON.parse(localStorage.getItem('poker13_settings')||'{}'); }catch(e){ return {}; } }
 function saveSettings(){ try{ localStorage.setItem('poker13_settings', JSON.stringify(Settings)); }catch(e){} }
 function applySettings(){
@@ -1631,59 +1665,188 @@ function applySettings(){
   $('musicToggle').checked=Settings.music;
   $('vibrationToggle').checked=Settings.vibration;
   $('animationsToggle').checked=Settings.animations;
-  if(Settings.music) startMusic(); else stopMusic();
+  if($('masterVolumeSlider')) $('masterVolumeSlider').value=Settings.masterVolume;
+  if($('musicVolumeSlider')) $('musicVolumeSlider').value=Settings.musicVolume;
+  if($('sfxVolumeSlider')) $('sfxVolumeSlider').value=Settings.sfxVolume;
+  SoundManager.refreshMusic();
 }
 
-/* ---------- tiny WebAudio SFX (no external audio files) ---------- */
-let audioCtx=null;
-function ensureAudioCtx(){
-  if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
-  if(audioCtx && audioCtx.state==='suspended'){ audioCtx.resume().catch(()=>{}); }
-  return audioCtx;
+/* =========================================================================
+   CENTRALIZED SOUND MANAGER
+   One engine for every SFX + 3 music states (lobby/gameplay/result) +
+   volume ducking + per-sound cooldown + a lightweight priority concept.
+   No external audio files (Web Audio API only) — copyright-safe, tiny.
+   ========================================================================= */
+const SoundManager = (function(){
+  let ctx=null, unlocked=false;
+  let musicNodes=null, musicState=null;
+  const lastPlayed={};
+  const PRIORITY={ gameOver:1, roundWin:2, straightFlush:3, poker:4, gameStart:5, yourTurn:6, cardPlay:7, pass:8, ui:9, chat:10 };
+  let duckUntil=0;
+  const debugLog=[];
+
+  function ensureCtx(){
+    if(!ctx){ try{ ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+    if(ctx && ctx.state==='suspended') ctx.resume().catch(()=>{});
+    return ctx;
+  }
+  function unlockAudio(){ if(unlocked) return; unlocked=true; ensureCtx(); }
+
+  function vol(base, opts){
+    opts=opts||{};
+    const quiet = opts.quiet ? 0.4 : 1;
+    const ducked = Date.now()<duckUntil ? 0.5 : 1;
+    return base * Settings.masterVolume * Settings.sfxVolume * quiet * ducked;
+  }
+  function tone(freq,dur,type,baseVol,delay,opts){
+    if(!Settings.sound) return;
+    const c=ensureCtx(); if(!c) return;
+    const t0=c.currentTime+(delay||0);
+    const osc=c.createOscillator(), gain=c.createGain();
+    osc.type=type||'sine'; osc.frequency.value=freq;
+    const v=Math.max(0,vol(baseVol||0.05,opts));
+    gain.gain.setValueAtTime(v, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    osc.connect(gain); gain.connect(c.destination);
+    osc.start(t0); osc.stop(t0+dur);
+  }
+  function cooldownOk(id, ms){
+    const now=Date.now();
+    if(lastPlayed[id] && now-lastPlayed[id]<ms) return false;
+    lastPlayed[id]=now;
+    return true;
+  }
+  function duck(ms){
+    duckUntil=Date.now()+(ms||900);
+    if(musicNodes){
+      const c=ensureCtx();
+      musicNodes.gain.gain.setTargetAtTime(musicNodes.baseVol*0.35, c.currentTime, 0.12);
+      setTimeout(()=>{ if(musicNodes) musicNodes.gain.gain.setTargetAtTime(musicNodes.baseVol, ensureCtx().currentTime, 0.5); }, ms||900);
+    }
+  }
+
+  const CATALOG={
+    cardSelect:      o=>tone(680,.05,'square',.024,0,o),
+    cardDeselect:    o=>tone(480,.045,'square',.017,0,o),
+    cardPlaySingle:  o=>tone(520,.11,'triangle',.05,0,o),
+    cardPlayPair:    o=>{tone(520,.09,'triangle',.045,0,o);tone(560,.09,'triangle',.04,.05,o);},
+    cardPlaySet:     o=>{tone(500,.08,'triangle',.04,0,o);tone(560,.08,'triangle',.038,.05,o);tone(620,.09,'triangle',.04,.1,o);},
+    cardPlayStraight:o=>{tone(440,.08,'sine',.04,0,o);tone(560,.08,'sine',.04,.06,o);tone(680,.12,'sine',.045,.12,o);},
+    cardPlayFlush:   o=>{tone(500,.06,'sine',.035,0,o);tone(650,.06,'sine',.035,.04,o);tone(800,.14,'sine',.05,.08,o);},
+    cardPlayPoker:   o=>{tone(140,.22,'sawtooth',.06,0,o);tone(600,.14,'sine',.05,.08,o);},
+    cardPlayStraightFlush:o=>{tone(420,.1,'sine',.045,0,o);tone(560,.1,'sine',.045,.08,o);tone(700,.1,'sine',.05,.16,o);tone(900,.22,'sine',.055,.24,o);},
+    pass:            o=>tone(240,.15,'sine',.04,0,o),
+    invalid:         o=>tone(160,.12,'square',.035,0,o),
+    yourTurn:        o=>{tone(760,.1,'sine',.04,0,o);tone(760,.07,'sine',.02,.26,o);},
+    newTrick:        o=>{tone(500,.08,'sine',.03,0,o);tone(640,.1,'sine',.03,.09,o);},
+    startingCard:    o=>{tone(880,.12,'sine',.04,0,o);tone(660,.18,'sine',.035,.1,o);},
+    roundWin:        o=>{tone(660,.15,'sine',.06,0,o);tone(880,.2,'sine',.06,.12,o);tone(990,.16,'sine',.045,.24,o);},
+    gameOverWin:     o=>{tone(700,.16,'sine',.06,0,o);tone(900,.2,'sine',.06,.14,o);},
+    gameOverLoss:    o=>tone(240,.35,'sine',.04,0,o),
+    buttonClick:     o=>tone(900,.03,'square',.015,0,o),
+    playerJoin:      o=>{tone(600,.07,'sine',.03,0,o);tone(760,.08,'sine',.03,.07,o);},
+    playerLeave:     o=>{tone(500,.09,'sine',.03,0,o);tone(360,.1,'sine',.03,.07,o);},
+    ready:           o=>{tone(700,.07,'sine',.035,0,o);tone(880,.09,'sine',.035,.06,o);},
+    unready:         o=>tone(500,.08,'sine',.03,0,o),
+    roomCreated:     o=>{tone(600,.1,'sine',.045,0,o);tone(760,.12,'sine',.045,.09,o);tone(920,.14,'sine',.045,.18,o);},
+    roomFull:        o=>{tone(700,.08,'sine',.04,0,o);tone(880,.1,'sine',.04,.07,o);},
+    pressure3:       o=>tone(340,.08,'sine',.022,0,o),
+    pressure2:       o=>tone(320,.09,'sine',.03,0,o),
+    pressure1:       o=>{tone(300,.12,'sine',.04,0,o);tone(360,.1,'sine',.03,.1,o);},
+    chatMsg:         o=>tone(700,.05,'sine',.018,0,o),
+    reaction:        o=>tone(760,.06,'square',.02,0,o)
+  };
+
+  function play(id, opts){
+    opts=opts||{};
+    if(opts.cooldownMs && !cooldownOk(id,opts.cooldownMs)) return;
+    const fn=CATALOG[id];
+    if(!fn) return;
+    fn(opts);
+    debugLog.unshift({id, t:new Date().toLocaleTimeString(), quiet:!!opts.quiet});
+    if(debugLog.length>12) debugLog.length=12;
+    if(window.__audioDebugPanelOpen) renderAudioDebugPanel();
+  }
+
+  function startMusicNodes(state){
+    const c=ensureCtx(); if(!c || !Settings.music) return;
+    const g=c.createGain();
+    const baseVol=0.013*Settings.masterVolume*Settings.musicVolume;
+    g.gain.value=baseVol;
+    const freqs = state==='result' ? [220,330] : state==='gameplay' ? [98,146.8] : [110,164.8];
+    const o1=c.createOscillator(); o1.type='sine'; o1.frequency.value=freqs[0];
+    const o2=c.createOscillator(); o2.type='sine'; o2.frequency.value=freqs[1];
+    o1.connect(g); o2.connect(g); g.connect(c.destination);
+    o1.start(); o2.start();
+    musicNodes={o1,o2,gain:g,baseVol};
+  }
+  function stopMusicNodes(){
+    if(!musicNodes) return;
+    try{ musicNodes.o1.stop(); musicNodes.o2.stop(); }catch(e){}
+    musicNodes=null;
+  }
+  function setMusicState(state){
+    if(musicState===state) return;
+    musicState=state;
+    stopMusicNodes();
+    if(Settings.music && state) startMusicNodes(state);
+  }
+  function refreshMusic(){
+    if(Settings.music && musicState){ if(!musicNodes) startMusicNodes(musicState); }
+    else stopMusicNodes();
+    if(musicNodes) musicNodes.gain.gain.value = musicNodes.baseVol = 0.013*Settings.masterVolume*Settings.musicVolume;
+  }
+
+  return { play, unlockAudio, setMusicState, refreshMusic, duck, PRIORITY, debugLog };
+})();
+
+/* thin, name-stable wrappers — every existing call site in this file keeps working unchanged */
+function sfxSelect(){ SoundManager.play('cardSelect'); }
+function sfxDeselect(){ SoundManager.play('cardDeselect'); }
+function sfxCardPlay(){ SoundManager.play('cardPlaySingle'); }
+function sfxCardPlayByType(type, opts){
+  const map={single:'cardPlaySingle',pair:'cardPlayPair',set:'cardPlaySet',straight:'cardPlayStraight',flush:'cardPlayFlush',poker:'cardPlayPoker',straightflush:'cardPlayStraightFlush'};
+  SoundManager.play(map[type]||'cardPlaySingle', opts);
+  if(type==='poker') SoundManager.duck(700);
+  if(type==='straightflush') SoundManager.duck(1000);
 }
-function playTone(freq,dur,type,vol){
-  if(!Settings.sound) return;
-  const ctx=ensureAudioCtx(); if(!ctx) return;
-  const osc=ctx.createOscillator(); const gain=ctx.createGain();
-  osc.type=type||'sine'; osc.frequency.value=freq;
-  gain.gain.setValueAtTime(vol||0.06, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+dur);
-  osc.connect(gain); gain.connect(ctx.destination);
-  osc.start(); osc.stop(ctx.currentTime+dur);
-}
-function sfxSelect(){ playTone(680,.05,'square',.02); }
-function sfxDeselect(){ playTone(480,.045,'square',.015); }
-function sfxCardPlay(){ playTone(520,.12,'triangle',.05); }
-function sfxPass(){ playTone(240,.15,'sine',.04); }
-function sfxTurn(){ playTone(760,.1,'sine',.04); }
-function sfxInvalid(){ playTone(160,.12,'square',.035); }
-function sfxNewTrick(){ playTone(500,.08,'sine',.03); setTimeout(()=>playTone(640,.1,'sine',.03),90); }
-function sfxWin(){ playTone(660,.15,'sine',.06); setTimeout(()=>playTone(880,.2,'sine',.06),120); }
-function sfxGameOver(){ playTone(200,.4,'sawtooth',.04); }
-function sfxButtonClick(){ playTone(900,.03,'square',.015); }
-function sfxPlayerJoin(){ playTone(600,.07,'sine',.03); setTimeout(()=>playTone(760,.08,'sine',.03),70); }
-function sfxPlayerLeave(){ playTone(500,.09,'sine',.03); setTimeout(()=>playTone(360,.1,'sine',.03),70); }
-function vibrate(ms){ if(Settings.vibration && navigator.vibrate) navigator.vibrate(ms); }
+function sfxPass(opts){ SoundManager.play('pass', opts); }
+function sfxTurn(){ SoundManager.play('yourTurn', {cooldownMs:800}); }
+function sfxInvalid(){ SoundManager.play('invalid', {cooldownMs:120}); }
+function sfxNewTrick(){ SoundManager.play('newTrick'); }
+function sfxStartingCard(){ SoundManager.play('startingCard'); }
+function sfxWin(){ SoundManager.play('roundWin'); SoundManager.duck(900); }
+function sfxGameOver(amIWinner){ SoundManager.play(amIWinner?'gameOverWin':'gameOverLoss'); SoundManager.duck(1000); }
+function sfxButtonClick(){ SoundManager.play('buttonClick', {cooldownMs:40}); }
+function sfxPlayerJoin(){ SoundManager.play('playerJoin'); }
+function sfxPlayerLeave(){ SoundManager.play('playerLeave'); }
+function sfxReady(){ SoundManager.play('ready'); }
+function sfxUnready(){ SoundManager.play('unready'); }
+function sfxRoomCreated(){ SoundManager.play('roomCreated'); }
+function sfxRoomFull(){ SoundManager.play('roomFull', {cooldownMs:3000}); }
+function sfxPressure(n){ SoundManager.play('pressure'+n, {cooldownMs:2500}); }
+function sfxChat(){ SoundManager.play('chatMsg', {cooldownMs:200}); }
+
+function vibrate(ms){ if(Settings.vibration && navigator.vibrate){ try{ navigator.vibrate(ms); }catch(e){} } }
+
 document.addEventListener('click', e=>{
+  SoundManager.unlockAudio();
   const btn=e.target.closest('.btn, .icon-btn, .reaction-btn');
   if(btn) sfxButtonClick();
-});
+}, {capture:true});
 
-let musicNodes=null;
-function startMusic(){
-  if(musicNodes) return;
-  const ctx=ensureAudioCtx(); if(!ctx) return;
-  const g=ctx.createGain(); g.gain.value=0.014;
-  const o1=ctx.createOscillator(); o1.type='sine'; o1.frequency.value=110;
-  const o2=ctx.createOscillator(); o2.type='sine'; o2.frequency.value=165;
-  o1.connect(g); o2.connect(g); g.connect(ctx.destination);
-  o1.start(); o2.start();
-  musicNodes={o1,o2,g};
+/* ---------- audio debug panel (append ?debug=1 to the URL to use) ---------- */
+if(location.search.indexOf('debug=1')>=0){
+  window.__audioDebugPanelOpen=true;
+  const panel=document.createElement('div');
+  panel.id='audioDebugPanel';
+  panel.style.cssText='position:fixed;left:8px;bottom:8px;z-index:999;background:rgba(0,0,0,.85);color:#0f0;font:10px monospace;padding:8px;border-radius:8px;max-width:220px;max-height:200px;overflow-y:auto;';
+  document.body.appendChild(panel);
 }
-function stopMusic(){
-  if(!musicNodes) return;
-  try{ musicNodes.o1.stop(); musicNodes.o2.stop(); }catch(e){}
-  musicNodes=null;
+function renderAudioDebugPanel(){
+  const panel=document.getElementById('audioDebugPanel');
+  if(!panel) return;
+  panel.innerHTML='<b>AUDIO DEBUG</b><br>'+SoundManager.debugLog.map(l=>l.t+' — '+l.id+(l.quiet?' (quiet)':'')).join('<br>');
 }
 
 /* ---------- screen / message helpers ---------- */
@@ -1712,7 +1875,7 @@ $('createRoomBtn').addEventListener('click', async ()=>{
   if(!name){ showFatal('Нэрээ оруулна уу.'); return; }
   const btn=$('createRoomBtn'); const origText=btn.textContent;
   btn.disabled=true; btn.textContent='ӨРӨӨ ҮҮСГЭЖ БАЙНА…';
-  try{ await createRoom(name); }catch(e){ showFatal(e.message); }
+  try{ await createRoom(name); sfxRoomCreated(); }catch(e){ showFatal(e.message); }
   btn.disabled=false; btn.textContent=origText;
 });
 $('showJoinBtn').addEventListener('click', ()=>{
@@ -1795,9 +1958,12 @@ $('scoreSheetOverlay').addEventListener('click', e=>{ if(e.target===$('scoreShee
 $('closeSettingsBtn').addEventListener('click', ()=> $('settingsOverlay').classList.remove('show'));
 $('settingsOverlay').addEventListener('click', e=>{ if(e.target===$('settingsOverlay')) $('settingsOverlay').classList.remove('show'); });
 $('soundToggle').addEventListener('change', e=>{ Settings.sound=e.target.checked; saveSettings(); });
-$('musicToggle').addEventListener('change', e=>{ Settings.music=e.target.checked; saveSettings(); if(Settings.music) startMusic(); else stopMusic(); });
+$('musicToggle').addEventListener('change', e=>{ Settings.music=e.target.checked; saveSettings(); SoundManager.refreshMusic(); });
 $('vibrationToggle').addEventListener('change', e=>{ Settings.vibration=e.target.checked; saveSettings(); });
 $('animationsToggle').addEventListener('change', e=>{ Settings.animations=e.target.checked; saveSettings(); document.body.classList.toggle('no-anim', !Settings.animations); });
+$('masterVolumeSlider').addEventListener('input', e=>{ Settings.masterVolume=parseFloat(e.target.value); saveSettings(); SoundManager.refreshMusic(); });
+$('musicVolumeSlider').addEventListener('input', e=>{ Settings.musicVolume=parseFloat(e.target.value); saveSettings(); SoundManager.refreshMusic(); });
+$('sfxVolumeSlider').addEventListener('input', e=>{ Settings.sfxVolume=parseFloat(e.target.value); saveSettings(); });
 applySettings();
 
 /* ---------- room chip (code + player count) ---------- */
@@ -1877,6 +2043,7 @@ document.querySelectorAll('.reaction-btn').forEach(btn=>{
     const emoji=btn.dataset.emoji;
     pushChat('__REACT__:'+emoji);
     spawnReactionForUid(Net.uid, emoji);
+    SoundManager.play('reaction');
     vibrate(10);
   });
 });
@@ -1895,6 +2062,7 @@ function appendChatMessage(msg){
   else row.innerHTML='<span class="chat-name">'+escapeHtml(msg.name)+':</span> <span class="chat-text">'+escapeHtml(msg.text)+'</span>';
   box.appendChild(row);
   box.scrollTop=box.scrollHeight;
+  if(!msg.system && msg.uid!==Net.uid) sfxChat();
   if(!$('chatPanel').classList.contains('open')){ chatUnread++; updateChatBadge(); }
 }
 function pushSystemNoticeLocal(text){
@@ -2009,8 +2177,11 @@ let lastKnownStatus=null;
 function onRoomUpdate(room){
   if(lastKnownStatus==='lobby' && room.status==='playing') playStartSequence(room);
   lastKnownStatus=room.status;
-  if(room.status==='lobby'){ showScreen('room'); renderLobbyRoom(room); }
-  else { showScreen('game'); renderGameScreen(room); }
+  if(room.status==='lobby'){ showScreen('room'); renderLobbyRoom(room); SoundManager.setMusicState('lobby'); }
+  else {
+    showScreen('game'); renderGameScreen(room);
+    SoundManager.setMusicState((room.status==='roundEnd'||room.status==='gameOver') ? 'result' : 'gameplay');
+  }
   maybeClaimHost();
 }
 function playStartSequence(room){
@@ -2019,10 +2190,14 @@ function playStartSequence(room){
   const g=room.game||{};
   const starter=playerBySeat(room, g.startingPlayerSeat);
   const steps=['ROOM READY','DEALING CARDS…', (starter?starter.name+' — ':'')+'3♦ OWNER FOUND','GAME START'];
+  const stepSounds=['roomFull','newTrick','startingCard','roundWin'];
+  SoundManager.duck(1800);
   overlay.classList.add('show');
   let i=0;
   function next(){
-    textEl.textContent=steps[i]; i++;
+    textEl.textContent=steps[i];
+    SoundManager.play(stepSounds[i]);
+    i++;
     textEl.style.animation='none'; void textEl.offsetWidth; textEl.style.animation='';
     if(i<steps.length) setTimeout(next,420);
     else setTimeout(()=>overlay.classList.remove('show'),420);
@@ -2054,6 +2229,14 @@ function renderLobbyRoom(room){
     });
   }
   prevPlayerUids=currentUids;
+
+  bySeat.forEach(([uid,p])=>{
+    const wasReady=prevLobbyReady[uid];
+    if(wasReady!==undefined && wasReady!==p.ready){ if(p.ready) sfxReady(); else sfxUnready(); }
+    prevLobbyReady[uid]=p.ready;
+  });
+  if(bySeat.length===4 && prevLobbyCount!==4) sfxRoomFull();
+  prevLobbyCount=bySeat.length;
 
   bySeat.forEach(([uid,p])=>{
     const slot=document.createElement('div');
@@ -2159,6 +2342,14 @@ function renderGameScreen(room){
     else if(g.lastPlayerSeat===seat && g.currentCombo){ pill.textContent='ТАВИЛАА'; pill.className='status-pill show'; }
     else pill.className='status-pill';
     slot.classList.toggle('offline', !p.connected);
+
+    const prevHc=prevHandCounts[seat];
+    if(prevHc!==undefined && hc!==prevHc){
+      if(hc===1) sfxPressure(1);
+      else if(hc===2) sfxPressure(2);
+      else if(hc===3) sfxPressure(3);
+    }
+    prevHandCounts[seat]=hc;
   });
 
   const me=playerBySeat(room,Net.mySeat);
@@ -2169,6 +2360,12 @@ function renderGameScreen(room){
   else if(myHandLen===2) $('humanCount').classList.add('low2');
   else if(myHandLen<=3 && myHandLen>0) $('humanCount').classList.add('low');
   $('humanStrip').classList.toggle('active', g.currentPlayerSeat===Net.mySeat);
+  const prevMyHc=prevHandCounts[Net.mySeat];
+  if(prevMyHc!==undefined && myHandLen!==prevMyHc){
+    if(myHandLen===1) sfxPressure(1); else if(myHandLen===2) sfxPressure(2); else if(myHandLen===3) sfxPressure(3);
+  }
+  prevHandCounts[Net.mySeat]=myHandLen;
+  if(g.firstMoveOfRound && room.round!==prevRoundForStartSound){ prevRoundForStartSound=room.round; sfxStartingCard(); }
   const myIcon=document.querySelector('#myAvatar .avatar-icon');
   if(myIcon && !myIcon.innerHTML) myIcon.innerHTML=avatarIconSvg(Net.uid);
   $('myAvatar').onclick=()=>openProfile(Net.uid, Net.name);
@@ -2180,6 +2377,19 @@ function renderGameScreen(room){
   if(hasRenderedTableOnce && prevComboKey && !comboKey && !g.firstMoveOfRound){ flashNewTrick(); }
   const isFreshPlay=hasRenderedTableOnce && !!comboKey && comboChanged;
   prevComboKey=comboKey; hasRenderedTableOnce=true;
+
+  if(isFreshPlay && g.currentCombo.seat!==Net.mySeat){
+    sfxCardPlayByType(g.currentCombo.type, {quiet:true});
+  }
+  if(g.passedSeats){
+    Object.keys(g.passedSeats).forEach(seatStr=>{
+      const seat=Number(seatStr);
+      const isNow=!!g.passedSeats[seatStr];
+      const was=!!prevPassedSeats[seatStr];
+      if(isNow && !was && seat!==Net.mySeat) sfxPass({quiet:true});
+    });
+    prevPassedSeats=Object.assign({}, g.passedSeats);
+  }
 
   if(comboChanged || firstRenderEver){
     played.innerHTML='';
@@ -2333,7 +2543,7 @@ function attemptPlay(){
   }
   selected=[];
   setMessage('');
-  sfxCardPlay(); vibrate(20);
+  sfxCardPlayByType(combo.type); vibrate(20);
   if(COMBO_RANK[combo.type]>SessionStats.bestComboRank) SessionStats.bestComboRank=COMBO_RANK[combo.type];
   if(combo.type==='poker') bumpStats({poker_count:1});
   else if(combo.type==='flush') bumpStats({flush_count:1});
@@ -2480,9 +2690,10 @@ function showRoundResult(room){
 }
 let lastCountedGameOverKey=null;
 function showGameOver(room){
-  sfxGameOver(); vibrate([30,50,30,50,60]);
   const g=room.game;
   const loser=playerBySeat(room,g.gameOverSeat);
+  const iAmLoserForSound = loser && loser.uid===Net.uid;
+  sfxGameOver(!iAmLoserForSound); vibrate(iAmLoserForSound?[20,30,20]:[30,50,30,50,60]);
   const overKey=room.round+'-'+g.gameOverSeat;
   if(overKey!==lastCountedGameOverKey){
     lastCountedGameOverKey=overKey;
